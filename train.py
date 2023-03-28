@@ -42,7 +42,7 @@ logger = Logger(log_dir)
 
 config = yaml.load(open('./configs/' + opts.config + '.yaml', 'r'), Loader=yaml.FullLoader)
 
-batch_size = config['batch_size']
+batch_size = config['batch_size'] # seems to be 1 by default
 epochs = config['epochs']
 iter_per_epoch = config['iter_per_epoch']
 img_size = (config['resolution'], config['resolution'])
@@ -89,7 +89,12 @@ torch.manual_seed(0)
 os.makedirs(log_dir + 'validation/', exist_ok=True)
 
 print("Start!")
+# TODO: https://pytorch.org/docs/1.8.0/generated/torch.nn.parallel.DistributedDataParallel.html#torch.nn.parallel.DistributedDataParallel
 
+# TODO: above only distributes forward(), not custom functions according to https://discuss.pytorch.org/t/multiple-forward-functions-in-dp-and-ddp/135029/3
+# TODO: this means we need to put all the logic with custom functions in train.py into the trainer class forward() function
+
+# TODO: also need distributed autograd context and distributed optimizer
 for n_epoch in tqdm(range(epoch_0, epochs)):
 
     iter_A = iter(loader_A)
@@ -109,7 +114,7 @@ for n_epoch in tqdm(range(epoch_0, epochs)):
 
         z = z.to(device)
         noise = [ee.to(device) for ee in noise]
-        w = trainer.mapping(z)
+        w = trainer.mapping(z) # forward propagation on stylegan
         if 'fixed_noise' in config and config['fixed_noise']:
             img_A, noise = None, None
 
@@ -124,8 +129,11 @@ for n_epoch in tqdm(range(epoch_0, epochs)):
                 iter_B = iter(loader_B)
                 img_B = next(iter_B)
             img_B = img_B.to(device)
-            
+
+        # another forward propagation on stylegan, with w in a continued forwarding
+        # also includes loss calc and back prop
         trainer.update(w=w, img=img_A, noise=noise, real_img=img_B, n_iter=n_iter)
+
         if (n_iter+1) % config['log_iter'] == 0:
             trainer.log_loss(logger, n_iter, prefix='train')
         if (n_iter+1) % config['image_save_iter'] == 0:
