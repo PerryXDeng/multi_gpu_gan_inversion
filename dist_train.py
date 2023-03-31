@@ -77,14 +77,13 @@ def parallel_train(rank, world_size, opts):
     trainer = Trainer(config, opts).to(rank)
     noise_example = trainer.noise_inputs
     train_data_split = 0.9 if 'train_split' not in config else config['train_split']
-    batch_size = config['batch_size']  # seems to be 1 by default
     epochs = config['epochs']
     iter_per_epoch = config['iter_per_epoch']
     img_size = (config['resolution'], config['resolution'])
 
-    batch_size = config['batch_size'] # seems to be 1 by default
+    process_batch_size = config['batch_size']//world_size # should be multiple of num_gpus
     setup(rank, world_size)
-    loader_A, loader_B = prepare_dataloaders(rank, world_size, batch_size, img_size, train_data_split, noise_example, opts, pin_memory=True, num_workers=4)
+    loader_A, loader_B = prepare_dataloaders(rank, world_size, process_batch_size, img_size, train_data_split, noise_example, opts, pin_memory=True, num_workers=4)
     ddp_model = DDP(trainer, device_ids=[rank], output_device=rank)
 
     # TODO: parameter specfication possibly incorrect - might need to access them through ddp_model.parameters()
@@ -136,7 +135,7 @@ def parallel_train(rank, world_size, opts):
             if 'use_realimg' in config and config['use_realimg']:
                 try:
                     img_B = next(iter_B)
-                    if img_B.size(0) != batch_size:
+                    if img_B.size(0) != process_batch_size:
                         iter_B = iter(loader_B)
                         img_B = next(iter_B)
                 except StopIteration:
