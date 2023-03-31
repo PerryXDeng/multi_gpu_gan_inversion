@@ -188,7 +188,9 @@ class Trainer(nn.Module):
         if 'use_fs_encoder' in self.config and self.config['use_fs_encoder']:
             return_features = True
             k = self.idx_k
-            w_recon, fea = self.enc(downscale(x_1, self.scale, self.scale_mode)) 
+            downscaled = downscale(x_1, self.scale, self.scale_mode)
+            print("right before error, downscaled ", downscaled.device, ", enc ", self.enc.device)
+            w_recon, fea = self.enc(downscaled)
             w_recon = w_recon + self.dlatent_avg
             features = [None]*k + [fea] + [None]*(17-k)
         else:
