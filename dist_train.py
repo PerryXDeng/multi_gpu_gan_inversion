@@ -153,10 +153,11 @@ def parallel_train(rank, world_size, opts):
             ############################################
             enc_opt.zero_grad()
             # print("process: ", rank, "input shape", z.shape, img_A.shape, noise[0].shape, img_B.shape)
+            print("process: ", rank, ", devices", z.device, img_A.device, noise[0].device, img_B.device)
             loss = ddp_model(z, img_A, noise, img_B, n_iter)
+            print("process: ", rank, ", iteration: ", n_iter, ", loss: ", loss.item())
             loss.backward()
             enc_opt.step()
-            print("process: ", rank, ", iteration: ", n_iter, ", loss: ", loss.item())
 
             # if (n_iter+1) % config['log_iter'] == 0:
             #     trainer.log_loss(logger, n_iter, prefix='train')
