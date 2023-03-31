@@ -57,16 +57,17 @@ def setup(rank, num_gpus):
 
 from torch.utils.data.distributed import DistributedSampler
 def prepare_dataloaders(rank, num_gpus, batch_size, img_size, train_data_split, noise_example, opts, pin_memory=False, num_workers=0):
-    to_gpu = lambda x: tuple(x_.to(rank) for x_ in default_collate(x))
     dataset_A = MyDataSet(image_dir=opts.dataset_path, label_dir=opts.label_path, output_size=img_size,
                           noise_in=noise_example, training_set=True, train_split=train_data_split)
     dataset_B = MyDataSet(image_dir=opts.real_dataset_path, label_dir=None, output_size=img_size,
                           noise_in=noise_example, training_set=True, train_split=train_data_split)
     sampler_A = DistributedSampler(dataset_A, num_replicas=num_gpus, rank=rank)
     sampler_B = DistributedSampler(dataset_B, num_replicas=num_gpus, rank=rank)
-    dataloader_A = data.DataLoader(dataset_A, batch_size=batch_size, sampler=sampler_A, num_workers=num_workers, collate_fn=to_gpu,
+    dataloader_A = data.DataLoader(dataset_A, batch_size=batch_size, sampler=sampler_A, num_workers=num_workers,
+                                   collate_fn=lambda x: tuple(x_.to(rank) for x_ in default_collate(x)),
                                    drop_last=False, shuffle=False, pin_memory=pin_memory)
-    dataloader_B = data.DataLoader(dataset_B, batch_size=batch_size, sampler=sampler_B, num_workers=num_workers, collate_fn=to_gpu,
+    dataloader_B = data.DataLoader(dataset_B, batch_size=batch_size, sampler=sampler_B, num_workers=num_workers,
+                                   collate_fn=lambda x: tuple(x_.to(rank) for x_ in default_collate(x)),
                                    drop_last=False, shuffle=False, pin_memory=pin_memory)
     return dataloader_A, dataloader_B
 
