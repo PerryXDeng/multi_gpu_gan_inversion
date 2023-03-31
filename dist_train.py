@@ -184,7 +184,7 @@ def parallel_train(rank, world_size, opts):
         with torch.no_grad():
             trainer.enc.eval()
             for i in range(10):
-                image_A = img_to_tensor(Image.open('./data/celeba_hq/%d.jpg' % i)).unsqueeze(0)#.to(device)
+                image_A = img_to_tensor(Image.open('./data/celeba_hq/%d.jpg' % i)).unsqueeze(0).to(rank)
                 output = ddp_model.module.test(img=image_A)
                 out_img = torch.cat(output, 3)
                 utils.save_image(clip_img(out_img[:1]), log_dir + 'validation/' + 'epoch_' +str(n_epoch+1) + '_' + str(i) + '_gpu' + rank + '.jpg')
