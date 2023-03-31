@@ -14,7 +14,6 @@ from tqdm import tqdm
 
 from utils.datasets import *
 # from utils.functions import *
-from dist_trainer import Trainer
 from ranger import Ranger
 
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -73,7 +72,7 @@ def prepare_dataloaders(rank, num_gpus, batch_size, img_size, train_data_split, 
 def parallel_train(rank, world_size, opts):
     print('starting training on process: ', rank)
     config = yaml.load(open('./configs/' + opts.config + '.yaml', 'r'), Loader=yaml.FullLoader)
-
+    from dist_trainer import Trainer
     trainer = Trainer(config, opts).to(rank)
     noise_example = trainer.noise_inputs
     train_data_split = 0.9 if 'train_split' not in config else config['train_split']
