@@ -162,7 +162,7 @@ def parallel_train(rank, world_size, opts):
             print("process: ", rank, ", devices", z.device, img_A.device if img_A is not None else -1,
                   noise[0].device, img_B.device if img_B is not None else -1)
             if rank != 0:
-                time.sleep(5)
+                time.sleep(10)
             loss = ddp_model(z, img_A, noise, img_B, n_iter)
             print("process: ", rank, ", iteration: ", n_iter, ", loss: ", loss.item())
             loss.backward()
