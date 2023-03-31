@@ -20,9 +20,9 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.multiprocessing as mp
 
 
-torch.backends.cudnn.enabled = True
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = True
+# torch.backends.cudnn.enabled = True
+# torch.backends.cudnn.deterministic = True
+# torch.backends.cudnn.benchmark = True
 torch.autograd.set_detect_anomaly(True)
 Image.MAX_IMAGE_PIXELS = None
 # device = torch.device('cuda')

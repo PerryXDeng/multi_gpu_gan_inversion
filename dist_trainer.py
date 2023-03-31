@@ -189,7 +189,9 @@ class Trainer(nn.Module):
             return_features = True
             k = self.idx_k
             downscaled = downscale(x_1, self.scale, self.scale_mode)
-            print("!!!!right before error, input device ", downscaled.device, " encoder devices", {p.device for p in self.enc.parameters()})
+            # print("!!!!right before error, input device ", downscaled.device, " encoder devices", {p.device for p in self.enc.parameters()})
+            # https://github.com/pytorch/pytorch/pull/48891 https://discuss.pytorch.org/t/c-cuda-extension-with-multiple-gpus/91241/6
+            # cuda extension breaks on parallel on older pytorch versions
             w_recon, fea = self.enc(downscaled)
             w_recon = w_recon + self.dlatent_avg
             features = [None]*k + [fea] + [None]*(17-k)
