@@ -7,7 +7,6 @@ import argparse
 # import torch.utils.data as data
 import yaml
 
-import time
 # from PIL import Image
 from tqdm import tqdm
 # from torchvision import transforms, utils
@@ -17,7 +16,6 @@ from utils.datasets import *
 # from utils.functions import *
 from dist_trainer import *
 from ranger import Ranger
-from torch.utils.data.dataloader import default_collate
 
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.multiprocessing as mp
@@ -161,8 +159,6 @@ def parallel_train(rank, world_size, opts):
             img_B = img_B.to(rank, non_blocking=True) if img_B is not None else None
             print("process: ", rank, ", devices", z.device, img_A.device if img_A is not None else -1,
                   noise[0].device, img_B.device if img_B is not None else -1)
-            if rank != 0:
-                time.sleep(10)
             loss = ddp_model(z, img_A, noise, img_B, n_iter)
             print("process: ", rank, ", iteration: ", n_iter, ", loss: ", loss.item())
             loss.backward()
