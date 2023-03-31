@@ -13,7 +13,7 @@ from tqdm import tqdm
 # from tensorboard_logger import Logger
 
 from utils.datasets import *
-# from utils.functions import *
+from utils.functions import clip_img
 from ranger import Ranger
 
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -83,6 +83,10 @@ def parallel_train(rank, world_size, opts):
     epochs = config['epochs']
     iter_per_epoch = config['iter_per_epoch']
     img_size = (config['resolution'], config['resolution'])
+    img_to_tensor = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+    ])
 
     process_batch_size = config['batch_size']//world_size # should be multiple of num_gpus
     setup(rank, world_size)
@@ -176,15 +180,14 @@ def parallel_train(rank, world_size, opts):
         enc_scheduler.step()
         # trainer.save_checkpoint(n_epoch, log_dir, enc_opt, enc_scheduler) # TODO: implement checkpoint for distributed training
 
-        # TODO: single gpu validation
         # Test the model on celeba hq dataset
-        # with torch.no_grad():
-            # trainer.enc.eval()
-            # for i in range(10):
-            #     image_A = img_to_tensor(Image.open('./data/celeba_hq/%d.jpg' % i)).unsqueeze(0)#.to(device)
-            #     output = trainer.test(img=image_A)
-            #     out_img = torch.cat(output, 3)
-            #     utils.save_image(clip_img(out_img[:1]), log_dir + 'validation/' + 'epoch_' +str(n_epoch+1) + '_' + str(i) + '.jpg')
+        with torch.no_grad():
+            trainer.enc.eval()
+            for i in range(10):
+                image_A = img_to_tensor(Image.open('./data/celeba_hq/%d.jpg' % i)).unsqueeze(0)#.to(device)
+                output = ddp_model.module.test(img=image_A)
+                out_img = torch.cat(output, 3)
+                utils.save_image(clip_img(out_img[:1]), log_dir + 'validation/' + 'epoch_' +str(n_epoch+1) + '_' + str(i) + '_gpu' + rank + '.jpg')
             # trainer.compute_loss(w=w, img=img_A, noise=noise, real_img=img_B)
             # trainer.log_loss(logger, n_iter, prefix='validation')
     if rank == 0:
