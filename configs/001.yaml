@@ -1,3 +1,4 @@
+# This is a sample config file for training a model with batch size 1
 # Input data
 resolution: 1024                 
 age_min: 20                  

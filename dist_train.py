@@ -20,9 +20,13 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.multiprocessing as mp
 
 
+# below settings cause error when calling iresnet in distributed training on PyTorch 1.7
+# probably due to calling cudnn instructions on the wrong gpu
 # torch.backends.cudnn.enabled = True
 # torch.backends.cudnn.deterministic = True
 # torch.backends.cudnn.benchmark = True
+
+
 torch.autograd.set_detect_anomaly(True)
 Image.MAX_IMAGE_PIXELS = None
 # device = torch.device('cuda')
@@ -156,8 +160,8 @@ def parallel_train(rank, world_size, opts):
             img_A = img_A.to(rank, non_blocking=True) if img_A is not None else None
             noise = [n.to(rank, non_blocking=True) for n in noise]
             img_B = img_B.to(rank, non_blocking=True) if img_B is not None else None
-            print("process: ", rank, ", devices", z.device, img_A.device if img_A is not None else -1,
-                  noise[0].device, img_B.device if img_B is not None else -1)
+            # print("process: ", rank, ", devices", z.device, img_A.device if img_A is not None else -1,
+            #       noise[0].device, img_B.device if img_B is not None else -1)
             loss = ddp_model(z, img_A, noise, img_B, n_iter)
             print("process: ", rank, ", iteration: ", n_iter, ", loss: ", loss.item())
             loss.backward()
