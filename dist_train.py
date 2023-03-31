@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from utils.datasets import *
 # from utils.functions import *
-from dist_trainer import *
+from dist_trainer import Trainer
 from ranger import Ranger
 
 from torch.nn.parallel import DistributedDataParallel as DDP

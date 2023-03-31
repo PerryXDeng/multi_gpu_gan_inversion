@@ -47,15 +47,6 @@ class fs_encoder_v2(nn.Module):
     def forward(self, x):
         latents = []
         features = []
-        print("!!!!!!!!!!!!!!!!!!!!!!!")
-        print("!!!!!!!!!!!!!!!!!!!!!!!")
-        print("!!!!!!!!!!!!!!!!!!!!!!!")
-        print("!!!RIGHT BEFORE CONV!!!, x.device: ", x.device, ", conv parameter devices: ", [p.device for p in self.conv.parameters()])
-        print("x", x)
-        print("conv params", [p for p in self.conv.parameters()])
-        print("!!!!!!!!!!!!!!!!!!!!!!!")
-        print("!!!!!!!!!!!!!!!!!!!!!!!")
-        print("!!!!!!!!!!!!!!!!!!!!!!!")
         x = self.conv(x)
         x = self.block_1(x)
         features.append(self.avg_pool(x))
