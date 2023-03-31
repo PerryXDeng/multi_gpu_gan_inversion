@@ -118,7 +118,7 @@ def parallel_train(rank, world_size, opts):
         epoch_0 = trainer.load_checkpoint(os.path.join(opts.log_path, opts.checkpoint))
 
     for n_epoch in tqdm(range(epoch_0, epochs)):
-
+        print('process', rank, 'starting epoch: ', n_epoch)
         iter_A = iter(loader_A)
         iter_B = iter(loader_B)
         iter_0 = n_epoch * iter_per_epoch
