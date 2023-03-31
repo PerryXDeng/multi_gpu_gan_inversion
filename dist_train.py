@@ -84,7 +84,7 @@ def parallel_train(rank, world_size, opts):
     process_batch_size = config['batch_size']//world_size # should be multiple of num_gpus
     setup(rank, world_size)
     loader_A, loader_B = prepare_dataloaders(rank, world_size, process_batch_size, img_size, train_data_split, noise_example, opts, pin_memory=True, num_workers=4)
-    ddp_model = DDP(trainer, device_ids=[rank], output_device=rank)
+    ddp_model = DDP(trainer, device_ids=[rank], output_device=rank, find_unused_parameters=True)
 
     # TODO: parameter specfication possibly incorrect - might need to access them through ddp_model.parameters()
     if 'optimizer' in config and config['optimizer'] == 'ranger':
@@ -152,11 +152,11 @@ def parallel_train(rank, world_size, opts):
             # trainer.update(w=w, img=img_A, noise=noise, real_img=img_B, n_iter=n_iter)
             ############################################
             enc_opt.zero_grad()
-            print("process: ", rank, "input shape", z.shape, img_A.shape, noise[0].shape, img_B.shape)
+            # print("process: ", rank, "input shape", z.shape, img_A.shape, noise[0].shape, img_B.shape)
             loss = ddp_model(z, img_A, noise, img_B, n_iter)
             loss.backward()
             enc_opt.step()
-            print("process: ", rank, "iteration: ", n_iter, "loss: ", loss.item())
+            print("process: ", rank, ", iteration: ", n_iter, ", loss: ", loss.item())
 
             # if (n_iter+1) % config['log_iter'] == 0:
             #     trainer.log_loss(logger, n_iter, prefix='train')
