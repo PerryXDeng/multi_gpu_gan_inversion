@@ -237,8 +237,8 @@ class Trainer(nn.Module):
         if 'use_fs_encoder' in self.config and self.config['use_fs_encoder']:
             k = self.idx_k 
             features = [None]*k + [fea_1] + [None]*(17-k)
-            print("!!!!right before error, input device ", w_recon.device if w_recon is not None else -1,
-                  " stylegan devices", {p.device for p in self.StyleGAN.parameters()})
+            # print("!!!!right before error, input device ", w_recon.device if w_recon is not None else -1,
+            #       " stylegan devices", {p.device for p in self.StyleGAN.parameters()})
             x_1_recon_2, _ = self.StyleGAN([w_recon], noise=n_1, input_is_latent=True, features_in=features, feature_scale=min(1.0, 0.0001*self.n_iter))
             self.lpips_loss += self.LPIPS(x_1_recon_2, x_1, multi_scale=multiscale_lpips).mean() if w_lpips > 0 else torch.tensor(0)
             self.id_loss += self.IDloss(x_1_recon_2, x_1).mean() if w_id > 0 else torch.tensor(0)
