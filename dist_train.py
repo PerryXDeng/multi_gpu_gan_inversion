@@ -64,10 +64,8 @@ def prepare_dataloaders(rank, num_gpus, batch_size, img_size, train_data_split, 
     sampler_A = DistributedSampler(dataset_A, num_replicas=num_gpus, rank=rank)
     sampler_B = DistributedSampler(dataset_B, num_replicas=num_gpus, rank=rank)
     dataloader_A = data.DataLoader(dataset_A, batch_size=batch_size, sampler=sampler_A, num_workers=num_workers,
-                                   collate_fn=lambda x: tuple(x_.to(rank) for x_ in default_collate(x)),
                                    drop_last=False, shuffle=False, pin_memory=pin_memory)
     dataloader_B = data.DataLoader(dataset_B, batch_size=batch_size, sampler=sampler_B, num_workers=num_workers,
-                                   collate_fn=lambda x: tuple(x_.to(rank) for x_ in default_collate(x)),
                                    drop_last=False, shuffle=False, pin_memory=pin_memory)
     return dataloader_A, dataloader_B
 
@@ -156,7 +154,12 @@ def parallel_train(rank, world_size, opts):
             ############################################
             enc_opt.zero_grad()
             # print("process: ", rank, "input shape", z.shape, img_A.shape, noise[0].shape, img_B.shape)
-            print("process: ", rank, ", devices", z.device, img_A.device, noise[0].device, img_B.device)
+            z = z.to(rank)
+            img_A = img_A.to(rank, non_blocking=True) if img_A is not None else None
+            noise = [n.to(rank, non_blocking=True) for n in noise]
+            img_B = img_B.to(rank, non_blocking=True) if img_B is not None else None
+            print("process: ", rank, ", devices", z.device, img_A.device if img_A is not None else -1,
+                  noise[0].device, img_B.device if img_B is not None else -1)
             loss = ddp_model(z, img_A, noise, img_B, n_iter)
             print("process: ", rank, ", iteration: ", n_iter, ", loss: ", loss.item())
             loss.backward()
