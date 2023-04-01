@@ -224,10 +224,12 @@ class Trainer(nn.Module):
         log_dir = os.path.join(self.opts.log_path, self.opts.config) + '/'
         x_1_recon_, x_1_, w_recon_, w_delta_, n_1_, fea_1_ = out[:6]
         output = [x_1_, x_1_recon_]
-        out_img = torch.cat(output, 3)
+        if str(self.dlatent_avg.device) == 'cuda:1':
+            print(x_1_recon_)
+        out_img = torch.cat(output, 3) # concatenates NCHW images horizontally
         os.makedirs(log_dir + 'train/', exist_ok=True)
         utils.save_image(clip_img(out_img[:1]),
-                         log_dir + 'train/' + 'iter_' + str(self.n_iter) + '_cuda' + str(self.dlatent_avg.device) + '.jpg')
+                         log_dir + 'train/' + 'iter_' + str(self.n_iter) + '_' + str(self.dlatent_avg.device) + '.jpg')
         #########
         x_1_recon, x_1, w_recon, w_delta, n_1, fea_1, fea_recon = out
 
