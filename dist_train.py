@@ -57,6 +57,11 @@ def setup(rank, num_gpus):
     dist.init_process_group("nccl", rank=rank, world_size=num_gpus)
 
 
+def cleanup():
+    "Cleans up the distributed environment"
+    dist.destroy_process_group()
+
+
 from torch.utils.data.distributed import DistributedSampler
 def prepare_dataloaders(rank, num_gpus, batch_size, img_size, train_data_split, noise_example, opts, pin_memory=False, num_workers=0):
     dataset_A = MyDataSet(image_dir=opts.dataset_path, label_dir=opts.label_path, output_size=img_size,
@@ -72,8 +77,10 @@ def prepare_dataloaders(rank, num_gpus, batch_size, img_size, train_data_split, 
     return dataloader_A, dataloader_B
 
 
+
 # backward() call automatically synchronized across multiple processes
 def parallel_train(rank, world_size, opts):
+    setup(rank, world_size)
     print('starting training on process: ', rank)
     config = yaml.load(open('./configs/' + opts.config + '.yaml', 'r'), Loader=yaml.FullLoader)
     from dist_trainer import Trainer
@@ -89,7 +96,6 @@ def parallel_train(rank, world_size, opts):
     ])
 
     process_batch_size = config['batch_size']//world_size # should be multiple of num_gpus
-    setup(rank, world_size)
     loader_A, loader_B = prepare_dataloaders(rank, world_size, process_batch_size, img_size, train_data_split, noise_example, opts, pin_memory=True, num_workers=4)
     ddp_model = DDP(trainer, device_ids=[rank], output_device=rank, find_unused_parameters=True)
 
@@ -181,18 +187,20 @@ def parallel_train(rank, world_size, opts):
         # trainer.save_checkpoint(n_epoch, log_dir, enc_opt, enc_scheduler) # TODO: implement checkpoint for distributed training
 
         # Test the model on celeba hq dataset on gpu0
-        if rank == 0:
+        #if rank == 0:
+        if True:
             with torch.no_grad():
                 for i in range(10):
                     image_A = img_to_tensor(Image.open('./data/celeba_hq/%d.jpg' % i)).unsqueeze(0).to(rank)
                     output = ddp_model.module.test(img=image_A)
                     out_img = torch.cat(output, 3)
-                    utils.save_image(clip_img(out_img[:1]), log_dir + 'validation/' + 'epoch_' +str(n_epoch+1) + '_' + str(i) + '.jpg')
+                    utils.save_image(clip_img(out_img[:1]), log_dir + 'validation/' + 'epoch_' +str(n_epoch+1) + '_' + str(i) + 'cuda' + str(rank) + '.jpg')
                 # trainer.compute_loss(w=w, img=img_A, noise=noise, real_img=img_B)
                 # trainer.log_loss(logger, n_iter, prefix='validation')
         dist.barrier()
     if rank == 0:
         ddp_model.module.save_model(log_dir)
+    cleanup()
 
 
 def main():

@@ -6,8 +6,8 @@ age_max: 70
 use_realimg: True
 # Training hyperparameters                 
 batch_size: 2
-epochs: 12    
-iter_per_epoch: 10
+epochs: 1    
+iter_per_epoch: 0
 device: 'cuda'
 # Optimizer parameters               
 optimizer: 'ranger'

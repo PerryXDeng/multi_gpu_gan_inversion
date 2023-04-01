@@ -199,7 +199,18 @@ class Trainer(nn.Module):
         # generate image
         x_1_recon, fea_recon = self.StyleGAN([w_recon], input_is_latent=True, return_features=True, features_in=features, feature_scale=min(1.0, 0.0001*self.n_iter))
         fea_recon = fea_recon[k].detach() 
-        return [x_1_recon, x_1[:,:3,:,:], w_recon, w_delta, n_1, fea, fea_recon]
+        out = [x_1_recon, x_1[:,:3,:,:], w_recon, w_delta, n_1, fea, fea_recon]
+        ######### FOR DEBUGGING
+        log_dir = os.path.join(self.opts.log_path, self.opts.config) + '/'
+        x_1_recon_, x_1_, w_recon_, w_delta_, n_1_, fea_1_ = out[:6]
+        output = [x_1_, x_1_recon_]
+        print("DEBUG DATA, DEVICE ", str(self.dlatent_avg.device), "w", w, "img", img, "recon", x_1_recon_)
+        out_img = torch.cat(output, 3) # concatenates NCHW images horizontally
+        os.makedirs(log_dir + 'train/', exist_ok=True)
+        utils.save_image(clip_img(out_img[:1]),
+                         log_dir + 'recon/' + 'iter_' + str(self.n_iter) + '_' + str(self.dlatent_avg.device) + '.jpg')
+        #########
+        return out
 
     def compute_loss(self, w=None, img=None, noise=None, real_img=None):
         return self.compute_loss_stylegan2(w=w, img=img, noise=noise, real_img=real_img)
@@ -220,19 +231,19 @@ class Trainer(nn.Module):
             noise = [torch.cat([ee, ee], dim=0) for ee in noise]
         
         out = self.get_image(w=w, img=img, noise=noise)
-        ######### FOR DEBUGGING
-        log_dir = os.path.join(self.opts.log_path, self.opts.config) + '/'
-        x_1_recon_, x_1_, w_recon_, w_delta_, n_1_, fea_1_ = out[:6]
-        output = [x_1_, x_1_recon_]
-        if str(self.dlatent_avg.device) == 'cuda:1':
-            print("w", w)
-            print("img", img)
-            print("recon", x_1_recon_)
-        out_img = torch.cat(output, 3) # concatenates NCHW images horizontally
-        os.makedirs(log_dir + 'train/', exist_ok=True)
-        utils.save_image(clip_img(out_img[:1]),
-                         log_dir + 'train/' + 'iter_' + str(self.n_iter) + '_' + str(self.dlatent_avg.device) + '.jpg')
-        #########
+        # ######### FOR DEBUGGING
+        # log_dir = os.path.join(self.opts.log_path, self.opts.config) + '/'
+        # x_1_recon_, x_1_, w_recon_, w_delta_, n_1_, fea_1_ = out[:6]
+        # output = [x_1_, x_1_recon_]
+        # if str(self.dlatent_avg.device) == 'cuda:1':
+        #     print("w", w)
+        #     print("img", img)
+        #     print("recon", x_1_recon_)
+        # out_img = torch.cat(output, 3) # concatenates NCHW images horizontally
+        # os.makedirs(log_dir + 'train/', exist_ok=True)
+        # utils.save_image(clip_img(out_img[:1]),
+        #                  log_dir + 'train/' + 'iter_' + str(self.n_iter) + '_' + str(self.dlatent_avg.device) + '.jpg')
+        # #########
         x_1_recon, x_1, w_recon, w_delta, n_1, fea_1, fea_recon = out
 
         # Loss setting
