@@ -225,8 +225,6 @@ class Trainer(nn.Module):
         log_dir = os.path.join(self.opts.log_path, self.opts.config) + '/'
         x_1_recon_, x_1_, w_recon_, w_delta_, n_1_, fea_1_ = out[:6]
         output = [x_1_, x_1_recon_]
-        if self.return_latent:
-            output += [w_recon_, fea_1_]
         out_img = torch.cat(output, 3)
         utils.save_image(clip_img(out_img[:1]),
                          log_dir + 'train/' + 'epoch_' + str(self.n_epoch + 1) + '_cuda' + str(self.dlatent_avg.device) + '_' + str(time.time()) + '.jpg')
