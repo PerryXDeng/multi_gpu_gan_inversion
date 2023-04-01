@@ -200,6 +200,7 @@ def main():
     world_size = opts.num_gpus
     log_dir = os.path.join(opts.log_path, opts.config) + '/'
     os.makedirs(log_dir, exist_ok=True)
+    os.makedirs(log_dir + 'validation/', exist_ok=True)
     print('spawning processes')
     mp.spawn(parallel_train, args=(world_size, opts,), nprocs=world_size)
 
