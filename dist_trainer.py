@@ -3,7 +3,7 @@ import sys
 # import numpy as np
 # import torch
 # import torch.nn as nn
-# import torch.nn.functional as F
+import torch.nn.functional as F
 # import torch.utils.data as data
 from torch.nn.parameter import Parameter
 
@@ -62,7 +62,7 @@ class Trainer(nn.Module):
         
         ##########################
         # Other nets
-        self.StyleGAN = self.init_stylegan(config) # TODO: check if submodules registered correctly for DDP
+        self.StyleGAN = Generator(1024, 512, 8) # TODO: check if submodules registered correctly for DDP
         self.Arcface = iresnet50() # TODO: check if submodules registered correctly for DDP
         self.parsing_net = BiSeNet(n_classes=19) # TODO: check if submodules registered correctly for DDP
         # Optimizers
@@ -105,29 +105,22 @@ class Trainer(nn.Module):
         self.loss_fn = lpips.LPIPS(net='alex', spatial=False)
         # self.loss_fn.to(self.device) # TODO: check if to(device) is necessary in case of DDP
         ##########################
-    
-    def init_stylegan(self, config):
-        """StyleGAN = G_main(
-            truncation_psi=config['truncation_psi'], 
-            resolution=config['resolution'], 
-            use_noise=config['use_noise'],  
-            randomize_noise=config['randomize_noise']
-        )"""
-        StyleGAN = Generator(1024, 512, 8)
-        return StyleGAN
-    
+        self.cos = nn.CosineSimilarity(dim=1, eps=1e-6)
+        self.mseloss_module = nn.MSELoss()
+        self.l1loss_module = nn.L1Loss()
+
     def mapping(self, z):
         return self.StyleGAN.get_latent(z).detach()
 
     def L1loss(self, input, target):
-        return nn.L1Loss()(input,target)
-    
-    def L2loss(self, input, target):
-        return nn.MSELoss()(input,target)
+        return self.l1loss_module(input,target)
 
-    def CEloss(self, x, target_age):
-        return nn.CrossEntropyLoss()(x, target_age)
-    
+    def L2loss(self, input, target):
+        return self.mseloss_module(input,target)
+    #
+    # def CEloss(self, x, target_age):
+    #     return nn.CrossEntropyLoss()(x, target_age)
+
     def LPIPS(self, input, target, multi_scale=False):
         if multi_scale:
             out = 0
@@ -136,29 +129,27 @@ class Trainer(nn.Module):
         else:
             out = self.loss_fn.forward(downscale(input, self.scale, self.scale_mode), downscale(target, self.scale, self.scale_mode)).mean()
         return out
-    
+
     def IDloss(self, input, target):
         x_1 = F.interpolate(input, (112,112))
         x_2 = F.interpolate(target, (112,112))
-        cos = nn.CosineSimilarity(dim=1, eps=1e-6)
         if 'multi_layer_idloss' in self.config and self.config['multi_layer_idloss']:
             id_1 = self.Arcface(x_1, return_features=True)
             id_2 = self.Arcface(x_2, return_features=True)
-            return sum([1 - cos(id_1[i].flatten(start_dim=1), id_2[i].flatten(start_dim=1)) for i in range(len(id_1))])
+            return sum([1 - self.cos(id_1[i].flatten(start_dim=1), id_2[i].flatten(start_dim=1)) for i in range(len(id_1))])
         else:
             id_1 = self.Arcface(x_1)
             id_2 = self.Arcface(x_2)
-            return 1 - cos(id_1, id_2)
-    
+            return 1 - self.cos(id_1, id_2)
+
     def landmarkloss(self, input, target):
-        cos = nn.CosineSimilarity(dim=1, eps=1e-6)
         x_1 = stylegan_to_classifier(input, out_size=(512, 512))
         x_2 = stylegan_to_classifier(target, out_size=(512,512))
         out_1 = self.parsing_net(x_1)
         out_2 = self.parsing_net(x_2)
-        parsing_loss = sum([1 - cos(out_1[i].flatten(start_dim=1), out_2[i].flatten(start_dim=1)) for i in range(len(out_1))])
+        parsing_loss = sum([1 - self.cos(out_1[i].flatten(start_dim=1), out_2[i].flatten(start_dim=1)) for i in range(len(out_1))])
         return parsing_loss.mean()
-        
+
 
     def feature_match(self, enc_feat, dec_feat, layer_idx=None):
         loss = []
@@ -167,18 +158,18 @@ class Trainer(nn.Module):
         for i in layer_idx:
             loss.append(self.L1loss(enc_feat[i], dec_feat[i]))
         return loss
-    
+
     def encode(self, img):
-        w_recon, fea = self.enc(downscale(img, self.scale, self.scale_mode)) 
+        w_recon, fea = self.enc(downscale(img, self.scale, self.scale_mode))
         w_recon = w_recon + self.dlatent_avg
         return w_recon, fea
 
     def get_image(self, w=None, img=None, noise=None, zero_noise_input=True, training_mode=True):
-        
+
         x_1, n_1 = img, noise
         if x_1 is None:
             x_1, _ = self.StyleGAN([w], input_is_latent=True, noise = n_1)
-           
+
         w_delta = None
         fea = None
         features = None
@@ -194,42 +185,40 @@ class Trainer(nn.Module):
             w_recon = w_recon + self.dlatent_avg
             features = [None]*k + [fea] + [None]*(17-k)
         else:
-            w_recon = self.enc(downscale(x_1, self.scale, self.scale_mode)) + self.dlatent_avg        
+            w_recon = self.enc(downscale(x_1, self.scale, self.scale_mode)) + self.dlatent_avg
 
         # generate image
         x_1_recon, fea_recon = self.StyleGAN([w_recon], input_is_latent=True, return_features=True, features_in=features, feature_scale=min(1.0, 0.0001*self.n_iter))
-        fea_recon = fea_recon[k].detach() 
+        fea_recon = fea_recon[k].detach()
         out = [x_1_recon, x_1[:,:3,:,:], w_recon, w_delta, n_1, fea, fea_recon]
-        ######### FOR DEBUGGING
-        log_dir = os.path.join(self.opts.log_path, self.opts.config) + '/'
-        x_1_recon_, x_1_, w_recon_, w_delta_, n_1_, fea_1_ = out[:6]
-        output = [x_1_, x_1_recon_]
-        print("DEBUG DATA, DEVICE ", str(self.dlatent_avg.device), "w", w, "img", img, "recon", x_1_recon_)
-        out_img = torch.cat(output, 3) # concatenates NCHW images horizontally
-        os.makedirs(log_dir + 'recon/', exist_ok=True)
-        utils.save_image(clip_img(out_img[:1]),
-                         log_dir + 'recon/' + 'iter_' + str(self.n_iter) + '_' + str(self.dlatent_avg.device) + '.jpg')
-        #########
+        # ######### FOR DEBUGGING
+        # device = str(self.dlatent_avg.device)
+        # log_dir = os.path.join(self.opts.log_path, self.opts.config) + '/'
+        # x_1_recon_, x_1_, w_recon_, w_delta_, n_1_, fea_1_ = out[:6]
+        # output = [x_1_, x_1_recon_]
+        # print("DEBUG DATA, DEVICE ", str(self.dlatent_avg.device), "w", w, "img", img, "recon", x_1_recon_)
+        # out_img = torch.cat(output, 3) # concatenates NCHW images horizontally
+        # os.makedirs(log_dir + 'recon/', exist_ok=True)
+        # utils.save_image(clip_img(out_img[:1]),
+        #                  log_dir + 'recon/' + 'iter_' + str(self.n_iter) + '_' + str(self.dlatent_avg.device) + '.jpg')
+        # #########
         return out
 
-    def compute_loss(self, w=None, img=None, noise=None, real_img=None):
-        return self.compute_loss_stylegan2(w=w, img=img, noise=noise, real_img=real_img)
-
     def compute_loss_stylegan2(self, w=None, img=None, noise=None, real_img=None):
-        
+
         if img is None:
             # generate synthetic images
             if noise is None:
                 # noise = [torch.randn(w.size()[:1] + ee.size()[1:]).to(self.device) for ee in self.noise_inputs] # TODO: check if to(device) is necessary
                 noise = [torch.randn(w.size()[:1] + ee.size()[1:]) for ee in self.noise_inputs]
-            img, _ = self.StyleGAN([w], input_is_latent=True, noise = noise)
+            img, _ = self.StyleGAN([w], input_is_latent=True, noise=noise)
             img = img.detach()
 
         if img is not None and real_img is not None:
             # concat synthetic and real data
             img = torch.cat([img, real_img], dim=0)
             noise = [torch.cat([ee, ee], dim=0) for ee in noise]
-        
+
         out = self.get_image(w=w, img=img, noise=noise)
         # ######### FOR DEBUGGING
         # log_dir = os.path.join(self.opts.log_path, self.opts.config) + '/'
@@ -248,43 +237,54 @@ class Trainer(nn.Module):
 
         # Loss setting
         w_l2, w_lpips, w_id = self.config['w']['l2'], self.config['w']['lpips'], self.config['w']['id']
-        b = x_1.size(0)//2
+        b = x_1.size(0) // 2
         if 'l2loss_on_real_image' in self.config and self.config['l2loss_on_real_image']:
             b = x_1.size(0)
-        self.l2_loss = self.L2loss(x_1_recon[:b], x_1[:b]) if w_l2 > 0 else torch.tensor(0) # l2 loss only on synthetic data
+        self.l2_loss = self.L2loss(x_1_recon[:b], x_1[:b]) if w_l2 > 0 else torch.tensor(
+            0)  # l2 loss only on synthetic data
         # LPIPS
-        multiscale_lpips=False if 'multiscale_lpips' not in self.config else self.config['multiscale_lpips']
-        self.lpips_loss = self.LPIPS(x_1_recon, x_1, multi_scale=multiscale_lpips).mean() if w_lpips > 0 else torch.tensor(0)
+        multiscale_lpips = False if 'multiscale_lpips' not in self.config else self.config['multiscale_lpips']
+        self.lpips_loss = self.LPIPS(x_1_recon, x_1,
+                                     multi_scale=multiscale_lpips).mean() if w_lpips > 0 else torch.tensor(0)
         self.id_loss = self.IDloss(x_1_recon, x_1).mean() if w_id > 0 else torch.tensor(0)
         self.landmark_loss = self.landmarkloss(x_1_recon, x_1) if self.config['w']['landmark'] > 0 else torch.tensor(0)
-        
+
         if 'use_fs_encoder' in self.config and self.config['use_fs_encoder']:
-            k = self.idx_k 
-            features = [None]*k + [fea_1] + [None]*(17-k)
+            k = self.idx_k
+            features = [None] * k + [fea_1] + [None] * (17 - k)
             # print("!!!!right before error, input device ", w_recon.device if w_recon is not None else -1,
             #       " stylegan devices", {p.device for p in self.StyleGAN.parameters()})
-            x_1_recon_2, _ = self.StyleGAN([w_recon], noise=n_1, input_is_latent=True, features_in=features, feature_scale=min(1.0, 0.0001*self.n_iter))
-            self.lpips_loss += self.LPIPS(x_1_recon_2, x_1, multi_scale=multiscale_lpips).mean() if w_lpips > 0 else torch.tensor(0)
+            x_1_recon_2, _ = self.StyleGAN([w_recon], noise=n_1, input_is_latent=True, features_in=features,
+                                           feature_scale=min(1.0, 0.0001 * self.n_iter))
+            self.lpips_loss += self.LPIPS(x_1_recon_2, x_1,
+                                          multi_scale=multiscale_lpips).mean() if w_lpips > 0 else torch.tensor(0)
             self.id_loss += self.IDloss(x_1_recon_2, x_1).mean() if w_id > 0 else torch.tensor(0)
-            self.landmark_loss += self.landmarkloss(x_1_recon_2, x_1) if self.config['w']['landmark'] > 0 else torch.tensor(0)
+            self.landmark_loss += self.landmarkloss(x_1_recon_2, x_1) if self.config['w'][
+                                                                             'landmark'] > 0 else torch.tensor(0)
 
         # downscale image
         x_1 = downscale(x_1, self.scale, self.scale_mode)
         x_1_recon = downscale(x_1_recon, self.scale, self.scale_mode)
-        
+
         # Total loss
         w_l2, w_lpips, w_id = self.config['w']['l2'], self.config['w']['lpips'], self.config['w']['id']
-        self.loss = w_l2*self.l2_loss + w_lpips*self.lpips_loss + w_id*self.id_loss
-        
+        self.loss = w_l2 * self.l2_loss + w_lpips * self.lpips_loss + w_id * self.id_loss
+
         if 'f_recon' in self.config['w']:
-            self.feature_recon_loss = self.L2loss(fea_1, fea_recon) 
-            self.loss += self.config['w']['f_recon']*self.feature_recon_loss
-        if 'l1' in self.config['w'] and self.config['w']['l1']>0:
+            self.feature_recon_loss = self.L2loss(fea_1, fea_recon)
+            self.loss += self.config['w']['f_recon'] * self.feature_recon_loss
+        if 'l1' in self.config['w'] and self.config['w']['l1'] > 0:
             self.l1_loss = self.L1loss(x_1_recon, x_1)
-            self.loss += self.config['w']['l1']*self.l1_loss
+            self.loss += self.config['w']['l1'] * self.l1_loss
         if 'landmark' in self.config['w']:
-            self.loss += self.config['w']['landmark']*self.landmark_loss
+            self.loss += self.config['w']['landmark'] * self.landmark_loss
         return self.loss
+
+    def compute_loss(self, w=None, img=None, noise=None, real_img=None):
+        return self.compute_loss_stylegan2(w=w, img=img, noise=noise, real_img=real_img)
+
+    def forward_and_calc_loss(self, w, img, noise, real_img):
+        return self.compute_loss(w=w, img=img, noise=noise, real_img=real_img)
 
     def test(self, w=None, img=None, noise=None, zero_noise_input=True, return_latent=False, training_mode=False):        
         if 'n_iter' not in self.__dict__.keys():
@@ -359,11 +359,8 @@ class Trainer(nn.Module):
     #     self.enc_opt.zero_grad()
     #     self.compute_loss(w=w, img=img, noise=noise, real_img=real_img).backward()
     #     self.enc_opt.step()
-    def forward_and_calc_loss(self, w, img, noise, real_img):
-        return self.compute_loss(w=w, img=img, noise=noise, real_img=real_img)
 
     def forward(self, z, img_A, noise, img_B, n_iter):
-        w = self.mapping(z) # forward propagation on stylegan
         # if 'fixed_noise' in config and config['fixed_noise']:
         #     img_A, noise = None, None
         #
@@ -382,7 +379,167 @@ class Trainer(nn.Module):
         # another forward propagation on stylegan, with w in a continued forwarding
         # also includes loss calc and back prop
         # self.update(w=w, img=img_A, noise=noise, real_img=img_B, n_iter=n_iter)
+        def mapping(z):
+            return self.StyleGAN.get_latent(z).detach()
 
+        def LPIPS(input, target, multi_scale=False):
+            if multi_scale:
+                out = 0
+                for k in range(3):
+                    out += self.loss_fn.forward(downscale(input, k, self.scale_mode),
+                                                downscale(target, k, self.scale_mode)).mean()
+            else:
+                out = self.loss_fn.forward(downscale(input, self.scale, self.scale_mode),
+                                           downscale(target, self.scale, self.scale_mode)).mean()
+            return out
+
+        def IDloss(input, target):
+            x_1 = F.interpolate(input, (112, 112))
+            x_2 = F.interpolate(target, (112, 112))
+            if 'multi_layer_idloss' in self.config and self.config['multi_layer_idloss']:
+                id_1 = self.Arcface(x_1, return_features=True)
+                id_2 = self.Arcface(x_2, return_features=True)
+                return sum(
+                    [1 - self.cos(id_1[i].flatten(start_dim=1), id_2[i].flatten(start_dim=1)) for i in range(len(id_1))])
+            else:
+                id_1 = self.Arcface(x_1)
+                id_2 = self.Arcface(x_2)
+                return 1 - self.cos(id_1, id_2)
+
+        def landmarkloss(input, target):
+            x_1 = stylegan_to_classifier(input, out_size=(512, 512))
+            x_2 = stylegan_to_classifier(target, out_size=(512, 512))
+            out_1 = self.parsing_net(x_1)
+            out_2 = self.parsing_net(x_2)
+            parsing_loss = sum(
+                [1 - self.cos(out_1[i].flatten(start_dim=1), out_2[i].flatten(start_dim=1)) for i in range(len(out_1))])
+            return parsing_loss.mean()
+
+        def get_image(w=None, img=None, noise=None, zero_noise_input=True, training_mode=True):
+
+            x_1, n_1 = img, noise
+            if x_1 is None:
+                x_1, _ = self.StyleGAN([w], input_is_latent=True, noise=n_1)
+
+            w_delta = None
+            fea = None
+            features = None
+            return_features = False
+            # Reconstruction
+            k = 0
+            if 'use_fs_encoder' in self.config and self.config['use_fs_encoder']:
+                return_features = True
+                k = self.idx_k
+                downscaled = downscale(x_1, self.scale, self.scale_mode)
+                # print("!!!!right before error, input device ", downscaled.device, " encoder devices", {p.device for p in self.enc.parameters()})
+                w_recon, fea = self.enc(downscaled)
+                w_recon = w_recon + self.dlatent_avg
+                features = [None] * k + [fea] + [None] * (17 - k)
+            else:
+                w_recon = self.enc(downscale(x_1, self.scale, self.scale_mode)) + self.dlatent_avg
+
+                # generate image
+            x_1_recon, fea_recon = self.StyleGAN([w_recon], input_is_latent=True, return_features=True,
+                                                 features_in=features, feature_scale=min(1.0, 0.0001 * self.n_iter))
+            fea_recon = fea_recon[k].detach()
+            out = [x_1_recon, x_1[:, :3, :, :], w_recon, w_delta, n_1, fea, fea_recon]
+            # ######### FOR DEBUGGING
+            # device = str(self.dlatent_avg.device)
+            # log_dir = os.path.join(self.opts.log_path, self.opts.config) + '/'
+            # x_1_recon_, x_1_, w_recon_, w_delta_, n_1_, fea_1_ = out[:6]
+            # output = [x_1_, x_1_recon_]
+            # print("DEBUG DATA, DEVICE ", str(self.dlatent_avg.device), "w", w, "img", img, "recon", x_1_recon_)
+            # out_img = torch.cat(output, 3) # concatenates NCHW images horizontally
+            # os.makedirs(log_dir + 'recon/', exist_ok=True)
+            # utils.save_image(clip_img(out_img[:1]),
+            #                  log_dir + 'recon/' + 'iter_' + str(self.n_iter) + '_' + str(self.dlatent_avg.device) + '.jpg')
+            # #########
+            return out
+
+        def compute_loss_stylegan2(w=None, img=None, noise=None, real_img=None):
+
+            if img is None:
+                # generate synthetic images
+                if noise is None:
+                    # noise = [torch.randn(w.size()[:1] + ee.size()[1:]).to(self.device) for ee in self.noise_inputs] # TODO: check if to(device) is necessary
+                    noise = [torch.randn(w.size()[:1] + ee.size()[1:]) for ee in self.noise_inputs]
+                img, _ = self.StyleGAN([w], input_is_latent=True, noise=noise)
+                img = img.detach()
+
+            if img is not None and real_img is not None:
+                # concat synthetic and real data
+                img = torch.cat([img, real_img], dim=0)
+                noise = [torch.cat([ee, ee], dim=0) for ee in noise]
+
+            out = get_image(w=w, img=img, noise=noise)
+            # ######### FOR DEBUGGING
+            # log_dir = os.path.join(self.opts.log_path, self.opts.config) + '/'
+            # x_1_recon_, x_1_, w_recon_, w_delta_, n_1_, fea_1_ = out[:6]
+            # output = [x_1_, x_1_recon_]
+            # if str(self.dlatent_avg.device) == 'cuda:1':
+            #     print("w", w)
+            #     print("img", img)
+            #     print("recon", x_1_recon_)
+            # out_img = torch.cat(output, 3) # concatenates NCHW images horizontally
+            # os.makedirs(log_dir + 'train/', exist_ok=True)
+            # utils.save_image(clip_img(out_img[:1]),
+            #                  log_dir + 'train/' + 'iter_' + str(self.n_iter) + '_' + str(self.dlatent_avg.device) + '.jpg')
+            # #########
+            x_1_recon, x_1, w_recon, w_delta, n_1, fea_1, fea_recon = out
+
+            # Loss setting
+            w_l2, w_lpips, w_id = self.config['w']['l2'], self.config['w']['lpips'], self.config['w']['id']
+            b = x_1.size(0) // 2
+            if 'l2loss_on_real_image' in self.config and self.config['l2loss_on_real_image']:
+                b = x_1.size(0)
+            self.l2_loss = self.mseloss_module(x_1_recon[:b], x_1[:b]) if w_l2 > 0 else torch.tensor(
+                0)  # l2 loss only on synthetic data
+            # LPIPS
+            multiscale_lpips = False if 'multiscale_lpips' not in self.config else self.config['multiscale_lpips']
+            self.lpips_loss = LPIPS(x_1_recon, x_1,
+                                         multi_scale=multiscale_lpips).mean() if w_lpips > 0 else torch.tensor(0)
+            self.id_loss = IDloss(x_1_recon, x_1).mean() if w_id > 0 else torch.tensor(0)
+            self.landmark_loss = landmarkloss(x_1_recon, x_1) if self.config['w'][
+                                                                          'landmark'] > 0 else torch.tensor(0)
+
+            if 'use_fs_encoder' in self.config and self.config['use_fs_encoder']:
+                k = self.idx_k
+                features = [None] * k + [fea_1] + [None] * (17 - k)
+                # print("!!!!right before error, input device ", w_recon.device if w_recon is not None else -1,
+                #       " stylegan devices", {p.device for p in self.StyleGAN.parameters()})
+                x_1_recon_2, _ = self.StyleGAN([w_recon], noise=n_1, input_is_latent=True, features_in=features,
+                                               feature_scale=min(1.0, 0.0001 * self.n_iter))
+                self.lpips_loss += LPIPS(x_1_recon_2, x_1,
+                                              multi_scale=multiscale_lpips).mean() if w_lpips > 0 else torch.tensor(0)
+                self.id_loss += IDloss(x_1_recon_2, x_1).mean() if w_id > 0 else torch.tensor(0)
+                self.landmark_loss += landmarkloss(x_1_recon_2, x_1) if self.config['w'][
+                                                                                 'landmark'] > 0 else torch.tensor(0)
+
+            # downscale image
+            x_1 = downscale(x_1, self.scale, self.scale_mode)
+            x_1_recon = downscale(x_1_recon, self.scale, self.scale_mode)
+
+            # Total loss
+            w_l2, w_lpips, w_id = self.config['w']['l2'], self.config['w']['lpips'], self.config['w']['id']
+            self.loss = w_l2 * self.l2_loss + w_lpips * self.lpips_loss + w_id * self.id_loss
+
+            if 'f_recon' in self.config['w']:
+                self.feature_recon_loss = self.mseloss_module(fea_1, fea_recon)
+                self.loss += self.config['w']['f_recon'] * self.feature_recon_loss
+            if 'l1' in self.config['w'] and self.config['w']['l1'] > 0:
+                self.l1_loss = self.l1loss_module(x_1_recon, x_1)
+                self.loss += self.config['w']['l1'] * self.l1_loss
+            if 'landmark' in self.config['w']:
+                self.loss += self.config['w']['landmark'] * self.landmark_loss
+            return self.loss
+
+        def compute_loss(w=None, img=None, noise=None, real_img=None):
+            return compute_loss_stylegan2(w=w, img=img, noise=noise, real_img=real_img)
+
+        def forward_and_calc_loss(w, img, noise, real_img):
+            return compute_loss(w=w, img=img, noise=noise, real_img=real_img)
+
+        w = mapping(z)  # forward propagation on stylegan
         self.n_iter = n_iter
-        return self.forward_and_calc_loss(w=w, img=img_A, noise=noise, real_img=img_B)
+        return forward_and_calc_loss(w=w, img=img_A, noise=noise, real_img=img_B)
 
