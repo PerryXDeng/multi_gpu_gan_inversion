@@ -187,7 +187,7 @@ def parallel_train(rank, world_size, opts):
                 image_A = img_to_tensor(Image.open('./data/celeba_hq/%d.jpg' % i)).unsqueeze(0).to(rank)
                 output = ddp_model.module.test(img=image_A)
                 out_img = torch.cat(output, 3)
-                utils.save_image(clip_img(out_img[:1]), log_dir + 'validation/' + 'epoch_' +str(n_epoch+1) + '_' + str(i) + '_gpu' + rank + '.jpg')
+                utils.save_image(clip_img(out_img[:1]), log_dir + 'validation/' + 'epoch_' +str(n_epoch+1) + '_' + str(i) + '_gpu' + str(rank) + '.jpg')
             # trainer.compute_loss(w=w, img=img_A, noise=noise, real_img=img_B)
             # trainer.log_loss(logger, n_iter, prefix='validation')
     if rank == 0:
