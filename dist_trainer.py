@@ -225,6 +225,7 @@ class Trainer(nn.Module):
         x_1_recon_, x_1_, w_recon_, w_delta_, n_1_, fea_1_ = out[:6]
         output = [x_1_, x_1_recon_]
         out_img = torch.cat(output, 3)
+        os.makedirs(log_dir + 'train/', exist_ok=True)
         utils.save_image(clip_img(out_img[:1]),
                          log_dir + 'train/' + 'iter_' + str(self.n_iter) + '_cuda' + str(self.dlatent_avg.device) + '.jpg')
         #########
