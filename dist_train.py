@@ -180,16 +180,17 @@ def parallel_train(rank, world_size, opts):
         enc_scheduler.step()
         # trainer.save_checkpoint(n_epoch, log_dir, enc_opt, enc_scheduler) # TODO: implement checkpoint for distributed training
 
-        # Test the model on celeba hq dataset
-        with torch.no_grad():
-            trainer.enc.eval()
-            for i in range(10):
-                image_A = img_to_tensor(Image.open('./data/celeba_hq/%d.jpg' % i)).unsqueeze(0).to(rank)
-                output = ddp_model.module.test(img=image_A)
-                out_img = torch.cat(output, 3)
-                utils.save_image(clip_img(out_img[:1]), log_dir + 'validation/' + 'epoch_' +str(n_epoch+1) + '_' + str(i) + '_gpu' + str(rank) + '.jpg')
-            # trainer.compute_loss(w=w, img=img_A, noise=noise, real_img=img_B)
-            # trainer.log_loss(logger, n_iter, prefix='validation')
+        # Test the model on celeba hq dataset on gpu0
+        if rank == 0:
+            with torch.no_grad():
+                for i in range(10):
+                    image_A = img_to_tensor(Image.open('./data/celeba_hq/%d.jpg' % i)).unsqueeze(0).to(rank)
+                    output = ddp_model.module.test(img=image_A)
+                    out_img = torch.cat(output, 3)
+                    utils.save_image(clip_img(out_img[:1]), log_dir + 'validation/' + 'epoch_' +str(n_epoch+1) + '_' + str(i) + '.jpg')
+                # trainer.compute_loss(w=w, img=img_A, noise=noise, real_img=img_B)
+                # trainer.log_loss(logger, n_iter, prefix='validation')
+        dist.barrier()
     if rank == 0:
         ddp_model.module.save_model(log_dir)
 
