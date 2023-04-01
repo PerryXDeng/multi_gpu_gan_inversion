@@ -206,7 +206,7 @@ class Trainer(nn.Module):
         output = [x_1_, x_1_recon_]
         print("DEBUG DATA, DEVICE ", str(self.dlatent_avg.device), "w", w, "img", img, "recon", x_1_recon_)
         out_img = torch.cat(output, 3) # concatenates NCHW images horizontally
-        os.makedirs(log_dir + 'train/', exist_ok=True)
+        os.makedirs(log_dir + 'recon/', exist_ok=True)
         utils.save_image(clip_img(out_img[:1]),
                          log_dir + 'recon/' + 'iter_' + str(self.n_iter) + '_' + str(self.dlatent_avg.device) + '.jpg')
         #########
