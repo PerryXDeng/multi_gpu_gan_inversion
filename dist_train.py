@@ -81,10 +81,11 @@ def prepare_dataloaders(rank, num_gpus, batch_size, img_size, train_data_split, 
 # backward() call automatically synchronized across multiple processes
 def parallel_train(rank, world_size, opts):
     setup(rank, world_size)
+    torch.cuda.set_device(rank)
     print('starting training on process: ', rank)
     config = yaml.load(open('./configs/' + opts.config + '.yaml', 'r'), Loader=yaml.FullLoader)
     from dist_trainer import Trainer
-    trainer = Trainer(config, opts).to(rank)
+    trainer = Trainer(config, opts).cuda()
     noise_example = trainer.noise_inputs
     train_data_split = 0.9 if 'train_split' not in config else config['train_split']
     epochs = config['epochs']

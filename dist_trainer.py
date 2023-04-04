@@ -268,6 +268,7 @@ class Trainer(nn.Module):
 
         # Total loss
         w_l2, w_lpips, w_id = self.config['w']['l2'], self.config['w']['lpips'], self.config['w']['id']
+        print(f'l2_loss  {self.l2_loss}  w_lips {w_lpips}  lpip+loss {self.lpips_loss} id_loss {self.id_loss}')
         self.loss = w_l2 * self.l2_loss + w_lpips * self.lpips_loss + w_id * self.id_loss
 
         if 'f_recon' in self.config['w']:
@@ -521,6 +522,7 @@ class Trainer(nn.Module):
 
             # Total loss
             w_l2, w_lpips, w_id = self.config['w']['l2'], self.config['w']['lpips'], self.config['w']['id']
+            #print(f'l2_loss  {self.l2_loss}  w_lips {w_lpips}  lpip+loss {self.lpips_loss} id_loss {self.id_loss}')
             self.loss = w_l2 * self.l2_loss + w_lpips * self.lpips_loss + w_id * self.id_loss
 
             if 'f_recon' in self.config['w']:
