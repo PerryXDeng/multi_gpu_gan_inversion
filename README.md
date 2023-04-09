@@ -1,6 +1,7 @@
 ## A Style-Based GAN Encoder for High Fidelity Reconstruction of Images and Videos
 
-Official implementation for paper: A Style-Based GAN Encoder for High Fidelity Reconstruction of Images and Videos. 
+A multiple-gpu implementation for paper: A Style-Based GAN Encoder for High Fidelity Reconstruction of Images and Videos. Compared to the [original repository](https://github.com/InterDigitalInc/FeatureStyleEncoder) repository adds two files (`dist_train.py` and `dist_trainer.py`) to allow data parallel training for style gan inversion, which is useful for video data.
+
 
 [[Video Editing Results]](https://drive.google.com/file/d/1ebih6TZxb2eLKxJdbO8GnsInDKSegfYL/view?usp=sharing)
 
@@ -48,7 +49,7 @@ conda activate feature_style
 
     You can modify the training options of the config file in the directory `configs/`.
     ```
-    python train.py --config 001 
+    python dist_train.py --config 002 --num_gpus=2
     ```
 
 ## Testing 
@@ -85,7 +86,7 @@ sh run_video_inversion_editing.sh
 
 Copyright © 2022, InterDigital R&D France. All rights reserved.
 
-This source code is made available under the license found in the LICENSE.txt in the root directory of this source tree.
+The original source code (not including `dist_train.py` and `dist_trainer.py`) is made available under the license found in the LICENSE.txt in the root directory of this source tree.
 
 
 
